@@ -218,6 +218,11 @@ class JsonWspResponse
 		// Split into header/body
 		$responseParts = explode("\r\n\r\n",$response,2);
 
+        // Remove the 100 continues
+        while($responseParts[0] == 'HTTP/1.1 100 Continue'){
+            $responseParts = explode("\r\n\r\n", $responseParts[1], 2);
+        }
+		
 		// Extract status code and description
 		$codeFirstIndex = strpos($responseParts[0]," ");
 		$codeSecondIndex = strpos($responseParts[0]," ",$codeFirstIndex+1);
