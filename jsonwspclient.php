@@ -2,7 +2,7 @@
 
 /*******************************************************************************
 
-Copyright 2012 Mikro Værkstedet A/S, www.mikrov.dk
+Copyright 2014 MV-Nordic, www.mv-nordic.com
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -56,15 +56,30 @@ class JsonWspClient
 	private $m_serviceUrlFromDescription;
 	private $m_serviceUrl;
 	private $m_descriptionUrl;
+	private $m_cookies = array();
+	private $m_ignoreSSLWarnings = false;
 
 	/**
 	 * Constructor
 	 * Creates a new client from a description url. It loads the service description and reads the service url
 	 * so methods can be called on the server.
 	 * @param $description_url The url to the jsonwsp service description
+	 * @param $ignoreSSLWarnings Set to true to ignore ssl warnings on request
+	 * @param $cookies A list of cookies to use in requests. Use cookie name as index and cookie content as value.
 	 */
-	public function __construct($description_url)
+	public function __construct($description_url,$ignoreSSLWarnings=false,$cookies=null)
 	{
+	
+		if($cookies == null || !is_array($cookies))
+		{
+			$this->m_cookies = array();
+		}
+		else 
+		{
+			$this->m_cookies = $cookies;
+		}
+	
+		$this->m_ignoreSSLWarnings = $ignoreSSLWarnings;
 		$this->m_descriptionUrl = $description_url;
 		$response = $this->SendRequest($description_url);
 
@@ -96,6 +111,17 @@ class JsonWspClient
 			$this->m_serviceUrl = $this->m_serviceUrlFromDescription;
 		}
 	}
+	
+	/**
+	 * 
+	 * Adds a cookie to the server requests. Can be used if the server needs specific cookies set, to authenticate or dispatch
+	 * the request in a specific way. Multiple cookies can be added, but only one at a time.
+	 * @param $name The name of the cookie
+	 */
+	public function addCookie($name,$value)
+	{
+		$this->m_cookies[$name] = $value;
+	}
 
 	/**
 	 * 
@@ -126,13 +152,30 @@ class JsonWspClient
 	 */
 	protected function SendRequest($url,$data="",$content_type="application/json")
 	{
+	
+		$headers = array("Content-Type: ".$content_type, "Content-length: ".strlen($data));
+		
+		if(count($this->m_cookies) > 0)
+		{
+			$cookieString = "";
+			foreach($this->m_cookies as $cName => $cValue)
+			{
+				$cookieString .= ($cookieString != "" ? "; " : "").$cName."=".$cValue;
+			}
+			$headers[] = "Cookie: ".$cookieString;
+		}
 		
 		// Init curl
 		$ch = curl_init($url);
-		curl_setopt($ch, CURLOPT_HTTPHEADER, array("Content-Type: ".$content_type, "Content-length: ".strlen($data)));
+		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_HEADER, 1);
-
+		if($this->m_ignoreSSLWarnings)
+		{
+			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);	// Ignore certificate inconsistencies
+			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);    	// Ignore certificate inconsistencies
+		}
+		
 		// Contains data, make POST request
 		if(strlen($data) > 0)
 		{
@@ -215,46 +258,45 @@ class JsonWspResponse
 	 */
 	public function __construct($response)
 	{
-		// Split into header/body
-		$responseParts = explode("\r\n\r\n",$response,2);
-
-		// Extract status code and description
-		$codeFirstIndex = strpos($responseParts[0]," ");
-		$codeSecondIndex = strpos($responseParts[0]," ",$codeFirstIndex+1);
-		$codeThirdIndex = strpos($responseParts[0],"\r\n");
-		$this->m_statusCode = intval(substr($responseParts[0],$codeFirstIndex+1,$codeSecondIndex-$codeFirstIndex));
-		$this->m_statusDesc = substr($responseParts[0],$codeSecondIndex+1,$codeThirdIndex-$codeSecondIndex);
-
-		// Get responsebody
-		$this->m_responseText = $responseParts[1];
-			
+		$body = $response;
+		// Loop through the headers and use the last header as the primary header
+		while (preg_match("/^HTTP\S*\s+(\d+)\s+(.+?)\r\n/", $body, $parts))
+		{	// Yes, we have an HTTP header - separate it from the body:
+			list($header, $body) = explode("\r\n\r\n", $body, 2);
+			// We expect another header after these headers, therefore ignoring these: 100
+			if (in_array($parts[1], array(100)))
+				continue;
+			// Hopefully an HTTP 200 header, but all accepted at this point:
+			$this->m_statusCode = $parts[1];
+			$this->m_statusDesc = $parts[2];
+			$this->m_responseText = $body;
+		}
 		// Statuscode is OK
 		if($this->m_statusCode = 200)
 		{
-			
 			// Decode json
 			$this->m_jsonResponse = json_decode($this->m_responseText,true);
-				
+
 			// Check for different response types and handle accordingly
 			if($this->m_jsonResponse["type"] == "jsonwsp/description")
 			{
 				$this->m_jsonWspType = JsonWspType::Description;
 				$this->m_callResult = JsonWspCallResult::Success;
 			}
-				
+
 			else if($this->m_jsonResponse["type"] == "jsonwsp/response")
 			{
 				$this->m_jsonWspType = JsonWspType::Response;
 				$this->m_callResult = JsonWspCallResult::Success;
 			}
-				
+
 			else if($this->m_jsonResponse["type"] == "jsonwsp/fault")
 			{
 				$this->m_jsonWspType = JsonWspType::Fault;
 				$this->m_callResult = JsonWspCallResult::ServiceFault;
 				$this->m_fault = new JsonWspFault($this->m_jsonResponse["fault"]);
 			}
-			
+
 			else if($this->m_jsonResponse == null)
 			{
 				$this->m_jsonWspType = JsonWspType::NoType;
@@ -262,8 +304,8 @@ class JsonWspResponse
 			}
 
 		}
-		
-		else 
+
+		else
 		{
 			$this->m_jsonWspType = JsonWspType::NoType;
 			$this->m_callResult  = JsonWspCallResult::NetworkFault;
@@ -320,7 +362,7 @@ class JsonWspResponse
 	}
 
 	/**
-	 * If there is a service fault, get the fault as a JsonWspFault object. If no fault data is found, this will return null. 
+	 * If there is a service fault, get the fault as a JsonWspFault object. If no fault data is found, this will return null.
 	 */
 	public function getServiceFault()
 	{

@@ -36,7 +36,7 @@ License along with this library.  If not, see <http://www.gnu.org/licenses/>.
 include "../jsonwspclient.php";
 
 // Create a new client object
-$client = new JsonWspClient("http://ladonize.org/python-demos/AlbumService/jsonwsp/description");
+$client = new JsonWspClient("http://ladonize.org/python-demos/AlbumService/jsonwsp/description",false,array("CookieName" => "CookieValue"));
 
 // Use a proxy instead of the native service url (from the description)
 $client->setViaProxy(true);
