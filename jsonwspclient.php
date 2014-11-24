@@ -117,6 +117,7 @@ class JsonWspClient
 	 * Adds a cookie to the server requests. Can be used if the server needs specific cookies set, to authenticate or dispatch
 	 * the request in a specific way. Multiple cookies can be added, but only one at a time.
 	 * @param $name The name of the cookie
+	 * @param $value The cookie value
 	 */
 	public function addCookie($name,$value)
 	{
@@ -125,21 +126,35 @@ class JsonWspClient
 
 	/**
 	 * 
+	 * Removes a cookie by its name
+	 * @param $name The name of the cookie
+	 */
+	public function removeCookie($name)
+	{
+		if(isset($this->m_cookies[$name]))
+		{
+			unset($this->m_cookies[$name]);
+		}
+	}
+
+	/**
+	 * 
 	 * Calls a service method on the service using a service name and optional arguments as an associative array
 	 * @param $methodname The name of the method to call on the service
 	 * @param $args The arguments to send with the service call as an associative array, using the keys as argument names.
+	 * @param $cookies List of cookies to use in the call, merges with the cookies already set on the client, but is not stored for future calls
 	 * @return JsonWspResponse object that contains the response information
 	 */
-	public function CallMethod($methodname,$args=null)
+	public function CallMethod($methodname,$args=null,$cookies=null)
 	{
 		// No arguments given, use empty array
 		if($args == null) $args = array();
 
 		// Create response data
 		$reqDict = array("methodname" => $methodname, "type" => "jsonwsp/request", "args" => $args);
-		
+
 		// Send a request to the service url and return the jsonwsp response
-		return $this->SendRequest($this->m_serviceUrl,json_encode($reqDict));
+		return self::SendRequest($this->m_serviceUrl,json_encode($reqDict),"application/json",$this->m_ignoreSSLWarnings,array_merge($this->m_cookies,$cookies));
 	}
 	
 	/**
@@ -150,15 +165,15 @@ class JsonWspClient
 	 * @param $content_type The contenttype to send in the request, defaults to application/json
 	 * @return JsonWspResponse object that contains the response information
 	 */
-	protected function SendRequest($url,$data="",$content_type="application/json")
+	public static function SendRequest($url,$data="",$content_type="application/json",$ignoreSSLWarnings,$cookies)
 	{
 	
 		$headers = array("Content-Type: ".$content_type, "Content-length: ".strlen($data));
 		
-		if(count($this->m_cookies) > 0)
+		if(count($cookies) > 0)
 		{
 			$cookieString = "";
-			foreach($this->m_cookies as $cName => $cValue)
+			foreach($cookies as $cName => $cValue)
 			{
 				$cookieString .= ($cookieString != "" ? "; " : "").$cName."=".$cValue;
 			}
@@ -170,7 +185,7 @@ class JsonWspClient
 		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_HEADER, 1);
-		if($this->m_ignoreSSLWarnings)
+		if($ignoreSSLWarnings)
 		{
 			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);	// Ignore certificate inconsistencies
 			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);    	// Ignore certificate inconsistencies
