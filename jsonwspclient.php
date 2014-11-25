@@ -69,7 +69,7 @@ class JsonWspClient
 	 */
 	public function __construct($description_url,$ignoreSSLWarnings=false,$cookies=null)
 	{
-	
+		
 		if($cookies == null || !is_array($cookies))
 		{
 			$this->m_cookies = array();
@@ -81,7 +81,7 @@ class JsonWspClient
 	
 		$this->m_ignoreSSLWarnings = $ignoreSSLWarnings;
 		$this->m_descriptionUrl = $description_url;
-		$response = $this->SendRequest($description_url);
+		$response = $this->SendRequest($description_url,"","application/json",$ignoreSSLWarnings);
 
 		if($response->getJsonWspType() == JsonWspType::Description)
 		{
@@ -153,8 +153,11 @@ class JsonWspClient
 		// Create response data
 		$reqDict = array("methodname" => $methodname, "type" => "jsonwsp/request", "args" => $args);
 
+		if(is_array($cookies)) $cookieList = array_merge($this->m_cookies,$cookies);
+		else $cookieList = $this->m_cookies;
+		
 		// Send a request to the service url and return the jsonwsp response
-		return self::SendRequest($this->m_serviceUrl,json_encode($reqDict),"application/json",$this->m_ignoreSSLWarnings,array_merge($this->m_cookies,$cookies));
+		return self::SendRequest($this->m_serviceUrl,json_encode($reqDict),"application/json",$this->m_ignoreSSLWarnings,$cookieList);
 	}
 	
 	/**
@@ -165,12 +168,11 @@ class JsonWspClient
 	 * @param $content_type The contenttype to send in the request, defaults to application/json
 	 * @return JsonWspResponse object that contains the response information
 	 */
-	public static function SendRequest($url,$data="",$content_type="application/json",$ignoreSSLWarnings,$cookies)
+	public static function SendRequest($url,$data="",$content_type="application/json",$ignoreSSLWarnings=false,$cookies=null)
 	{
-	
 		$headers = array("Content-Type: ".$content_type, "Content-length: ".strlen($data));
 		
-		if(count($cookies) > 0)
+		if($cookies != null || count($cookies) > 0)
 		{
 			$cookieString = "";
 			foreach($cookies as $cName => $cValue)
@@ -182,13 +184,15 @@ class JsonWspClient
 		
 		// Init curl
 		$ch = curl_init($url);
+		
 		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_HEADER, 1);
+		
 		if($ignoreSSLWarnings)
 		{
-			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);	// Ignore certificate inconsistencies
-			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);    	// Ignore certificate inconsistencies
+			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+			curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, FALSE);
 		}
 		
 		// Contains data, make POST request
