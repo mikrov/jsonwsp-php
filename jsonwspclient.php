@@ -57,6 +57,7 @@ class JsonWspClient
 	private $m_serviceUrl;
 	private $m_descriptionUrl;
 	private $m_cookies = array();
+	private $m_headers = array();
 	private $m_ignoreSSLWarnings = false;
 
 	/**
@@ -67,7 +68,7 @@ class JsonWspClient
 	 * @param $ignoreSSLWarnings Set to true to ignore ssl warnings on request
 	 * @param $cookies A list of cookies to use in requests. Use cookie name as index and cookie content as value.
 	 */
-	public function __construct($description_url,$ignoreSSLWarnings=false,$cookies=null)
+	public function __construct($description_url,$ignoreSSLWarnings=false,$cookies=null,$headers=null)
 	{
 		
 		if($cookies == null || !is_array($cookies))
@@ -78,10 +79,19 @@ class JsonWspClient
 		{
 			$this->m_cookies = $cookies;
 		}
+		
+		if($headers == null || !is_array($headers))
+		{
+			$this->m_headers = array();
+		}
+		else 
+		{
+			$this->m_headers = $headers;
+		}
 	
 		$this->m_ignoreSSLWarnings = $ignoreSSLWarnings;
 		$this->m_descriptionUrl = $description_url;
-		$response = $this->SendRequest($description_url,"","application/json",$ignoreSSLWarnings);
+		$response = $this->SendRequest($description_url,"","application/json",$ignoreSSLWarnings,$cookies,$headers);
 
 		if($response->getJsonWspType() == JsonWspType::Description)
 		{
@@ -139,13 +149,37 @@ class JsonWspClient
 
 	/**
 	 * 
+	 * Adds a HTTP header to the server requests. Multiple headers can be added, but only one at a time.
+	 * @param $name The name of the header
+	 * @param $value The header value
+	 */
+	public function addHeader($name,$value)
+	{
+		$this->m_headers[$name] = $value;
+	}
+
+	/**
+	 * 
+	 * Removes a header by its name
+	 * @param $name The name of the header
+	 */
+	public function removeHeader($name)
+	{
+		if(isset($this->m_headers[$name]))
+		{
+			unset($this->m_headers[$name]);
+		}
+	}
+
+	/**
+	 * 
 	 * Calls a service method on the service using a service name and optional arguments as an associative array
 	 * @param $methodname The name of the method to call on the service
 	 * @param $args The arguments to send with the service call as an associative array, using the keys as argument names.
 	 * @param $cookies List of cookies to use in the call, merges with the cookies already set on the client, but is not stored for future calls
 	 * @return JsonWspResponse object that contains the response information
 	 */
-	public function CallMethod($methodname,$args=null,$cookies=null)
+	public function CallMethod($methodname,$args=null,$cookies=null,$headers=null)
 	{
 		// No arguments given, use empty array
 		if($args == null) $args = array();
@@ -156,8 +190,11 @@ class JsonWspClient
 		if(is_array($cookies)) $cookieList = array_merge($this->m_cookies,$cookies);
 		else $cookieList = $this->m_cookies;
 		
+		if(is_array($headers)) $headerList = array_merge($this->m_headers,$headers);
+		else $headerList = $this->m_headers;
+		
 		// Send a request to the service url and return the jsonwsp response
-		return self::SendRequest($this->m_serviceUrl,json_encode($reqDict),"application/json",$this->m_ignoreSSLWarnings,$cookieList);
+		return self::SendRequest($this->m_serviceUrl,json_encode($reqDict),"application/json",$this->m_ignoreSSLWarnings,$cookieList,$headerList);
 	}
 	
 	/**
@@ -168,10 +205,17 @@ class JsonWspClient
 	 * @param $content_type The contenttype to send in the request, defaults to application/json
 	 * @return JsonWspResponse object that contains the response information
 	 */
-	public static function SendRequest($url,$data="",$content_type="application/json",$ignoreSSLWarnings=false,$cookies=null)
+	public static function SendRequest($url,$data="",$content_type="application/json",$ignoreSSLWarnings=false,$cookies=null,$headers=null)
 	{
-		$headers = array("Content-Type: ".$content_type, "Content-length: ".strlen($data));
-		
+		$headerList = array("Content-Type: ".$content_type, "Content-length: ".strlen($data));
+		if($headers != null && count($headers) > 0)
+		{
+			foreach($headers as $hName => $hValue)
+			{
+				$headerList[] = $hName.": ".$hValue;
+			}
+		}
+
 		if($cookies != null || count($cookies) > 0)
 		{
 			$cookieString = "";
@@ -179,13 +223,15 @@ class JsonWspClient
 			{
 				$cookieString .= ($cookieString != "" ? "; " : "").$cName."=".$cValue;
 			}
-			$headers[] = "Cookie: ".$cookieString;
+			echo $cookieString;
+			$headerList[] = "Cookie: ".$cookieString;
 		}
 		
 		// Init curl
 		$ch = curl_init($url);
-		
-		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+		var_dump($cookies);
+		var_dump($headerList);
+		curl_setopt($ch, CURLOPT_HTTPHEADER, $headerList);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_HEADER, 1);
 		
