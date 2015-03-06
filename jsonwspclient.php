@@ -223,14 +223,12 @@ class JsonWspClient
 			{
 				$cookieString .= ($cookieString != "" ? "; " : "").$cName."=".$cValue;
 			}
-			echo $cookieString;
+			
 			$headerList[] = "Cookie: ".$cookieString;
 		}
 		
 		// Init curl
 		$ch = curl_init($url);
-		var_dump($cookies);
-		var_dump($headerList);
 		curl_setopt($ch, CURLOPT_HTTPHEADER, $headerList);
 		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($ch, CURLOPT_HEADER, 1);
